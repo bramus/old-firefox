@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+# Install Old Firefox
+#
+# Refs:
+# - https://gist.github.com/bmaupin/731fc12a178114883ff6e7195a133563
+# - https://github.com/Steveorevo/unpackdmg/blob/master/src/unpackdmg.php
+# - https://stackoverflow.com/a/78068659 
+
+if [ -z "$1" ]; then
+    echo "Please pass in a version, e.g. \"./old-firefox 128.0.3\""
+	exit 0
+fi
+
+if [ -d "./Firefox $1.app" ]; then
+    echo "ℹ The file \"Firefox $1.app\" already exists, no need to download :)"
+else
+
+    echo "$(date): Downloading..."
+    if [ -f "./Firefox $1.dmg" ]; then
+        echo "✔ File already exists on disk, using that."
+    else
+        curl -L -s --fail-with-body -o "Firefox $1.dmg" "https://ftp.mozilla.org/pub/firefox/releases/$1/mac/en-US/Firefox%20$1.dmg"
+        if [ $? -eq 0 ]; then
+            echo "✔ done"
+        else
+            rm "Firefox $1.dmg"
+            echo "✗ Could not find specified version"
+            exit 0
+        fi
+    fi
+
+    echo "$(date): Mounting..."
+    hdiutil attach "./Firefox $1.dmg" -noverify -nobrowse -quiet
+    if [ $? -eq 0 ]; then
+        echo "✔ done"
+    else
+        echo "✗ Could not mount. Please check if 'Disk Images' are being 'Allowed' within the Restriction profile."
+        exit 0
+    fi
+
+    echo "$(date): Copying Firefox.app..."
+    cp -rf "/Volumes/Firefox/Firefox.app" "./Firefox $1.app"
+
+    echo "$(date): Unmounting..."
+    hdiutil detach "$(/bin/df | /usr/bin/grep "/Volumes/Firefox" | awk '{print $1}')" -quiet
+
+    echo "$(date): Cleaning up"
+    rm -rf "./Firefox $1.dmg"
+fi
+
+if [ ! -f "./.profiles/$1/user.js" ]; then
+    echo "$(date): Creating Profile..."
+
+    mkdir -p ".profiles/$1"
+
+    # Disable automatic updates and default browser check
+    echo "user_pref(\"app.update.auto\", false);
+    user_pref(\"app.update.enabled\", false);
+    user_pref(\"browser.shell.checkDefaultBrowser\", false);
+    user_pref(\"browser.tabs.remote.autostart\", false);" > "./.profiles/$1/user.js"
+
+    echo "✔ done"
+fi
+
+echo "$(date): Launching Firefox $1"
+"./Firefox $1.app/Contents/MacOS/firefox" --profile "./.profiles/$1"
